@@ -359,7 +359,7 @@ def main():
         
         # write some statistics to screen 
         chi0,bcalc0 = chi(w_init,bounds)
-        print "# initial conditions"
+        print "# Initial conditions"
         print "# Chi squared: %10.6f" %  chi0 
         #print "# RMSD:        %10.6f" %  rmsd(w_init)
         print "# Srel:        %10.6f" %  srel(w_init) 
@@ -375,7 +375,7 @@ def main():
         # write some statistics to screen 
         chi_opt,bcalc_opt = chi(w_opt,bounds)
         
-        print "# initial conditions"
+        print "#  After minimization"
         print "# Chi squared: %10.6f" %  chi_opt 
         #print "# RMSD:        %10.6f" %  rmsd(w_opt)
         print "# Srel:        %10.6f" %  srel(w_opt) 
