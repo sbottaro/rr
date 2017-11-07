@@ -20,22 +20,18 @@ def parse():
 
     parser.add_argument("--exp", dest="exp_file",help="experimental_data",default=None,required=True,nargs="*")
     parser.add_argument("--bcalc", dest="bcalc_file",help="back-calculated quantity",default=None,required=True,nargs="*")
-
-    #parser.add_argument("-n", dest="nsamples",help="number of samples ",type=int,default=None,required=False)
-    #parser.add_argument("--start", dest="start",help="start",required=False,type=int,default=-1)
-    #parser.add_argument("--stride", dest="stride",help="stride",required=False,type=int,default=-1
+    
     parser.add_argument("--power", dest="noe_power",help="power for NOE (default=6)",type=float,default=6.0,required=False)
     parser.add_argument("--theta", dest="theta",help="theta value",type=float,default=1.0,required=False)
     parser.add_argument("--blocks", dest="blocks",help="number of blocks",type=int,default=1,required=False)
     parser.add_argument("--verbose", dest="verbose",help="verbose",action='store_true',default=False)
 
-    #parser.add_argument("--seed", dest="seed",help="seed",type=int,default=0,required=False)
-    
     args = parser.parse_args()
     
     return args
 
 
+# READ BACK-Calculated data
 def read_sim(f_sim):
 
     frames = []
@@ -46,7 +42,7 @@ def read_sim(f_sim):
             if("#" not in line):
                 frames.append(float(line.split()[0]))
                 tmp.append([float(x) for x in line.split()[1:]])
-                #data_source_new.append(data_source[i])
+                
         tmp = np.array(tmp)
         if(i==0):
             data = np.array(tmp)
@@ -55,7 +51,8 @@ def read_sim(f_sim):
             data = np.concatenate((data,tmp),axis=1)
         fh.close()
     return frames, np.array(data)
-    
+
+# read Experimental data
 def read_exp(f_exp):
 
     labels = []
@@ -64,6 +61,7 @@ def read_exp(f_exp):
     data_source = []
     for f in f_exp:
 
+        num = 0
         fh = open(f)
         for i,line in enumerate(fh):
             if(len(line.split())<3): continue
@@ -74,14 +72,15 @@ def read_exp(f_exp):
                 if(exp_type not in exp_types):
                     print "# I don't know ", exp_type, ". Exiting"
                     sys.exit(1)
-                    
+                else:
+                    print "# READING",exp_type, "DATA",
                 prior_type = line.split("PRIOR=")[1].split()[0]
                 if(prior_type not in prior_types):
                     print "# I don't know ", prior_type, ". Exiting"
                     sys.exit(1)
                 
             else:
-                
+                num += 1
                 # NOES 
                 if(exp_type=="NOE"):
                     data_source.append(exp_type)
@@ -125,7 +124,6 @@ def read_exp(f_exp):
                     err = (noe_power*rpow*sigma/(r))**2
                     exp_data.append([rpow,err])
                     
-                    
                 # chemical shift
                 if(exp_type=="CS" or exp_type=="JCOUPLINGS" or exp_type == "SAXS"):
                     if("#" in line):
@@ -137,8 +135,10 @@ def read_exp(f_exp):
                         sigma = float(line.split()[2])
                         exp_data.append([val,sigma**2])
                         bound.append([None, None])
+
                         
         fh.close()
+        print "(datapoints=%d)" % num 
     return labels,np.array(exp_data),bound,data_source
 
 
@@ -276,8 +276,6 @@ def stats(weights,bounds,source):
     stri += "# %20s %8s %8s %8s \n" % ("Label","predict","experim","sigma")
     ss = np.sum((weights[:,np.newaxis]*sim_data_block),axis=0)
     for p in range(exp_avg.shape[0]):
-        #print  "%10s %10s %8.5f %8.5f\n" % (labels[p][0],labels[p][1],np.power(bcalcn[p],-1./noe_power), exp_avg[p,0])
-        #print  "%10s %10s %8.5f %8.5f\n" % (labels[p][0],labels[p][1],bcalcn[p], np.power(exp_avg[p,0],-1./noe_power))
         
         if(source[p]=="NOE"):
             bcalc = np.power(ss[p],-1./noe_power)/noe_factor
@@ -290,12 +288,12 @@ def stats(weights,bounds,source):
 
 def write(name,weights,bounds,indeces,source,mode="a"):
     
-    fho = open("stats_%s.dat" % (name),mode)
+    fho = open("%s_stats.dat" % (name),mode)
     fho.write(stats(weights,bounds,source))
     fho.close()
 
     # print weights
-    fho = open("weights_%s.dat" % (name),mode)  
+    fho = open("%s_weights.dat" % (name),mode)  
     for f in range(len(weights)):
         #print 0.5*(ee[f+1]+ee[f]), hh[f], hhw[f]
         fho.write("%10d %e \n" % (indeces[f],weights[f]))
@@ -321,14 +319,14 @@ def main():
 
     # read experimental data
     labels,exp_avg,bounds,data_source  = read_exp(args.exp_file)
+    print "# total number of experimental datapoints:", len(data_source)
 
     # read back-calculated
     frames, sim_data = read_sim(args.bcalc_file)
-    print "A1", sim_data.shape
-    print "A2", len(data_source)
+    print "# total number of back-calculated datapoints: ", sim_data.shape
+
     # scale NOEs by some factor to avoid numerical issues and calculate the -noe_power
     sim_data = np.array([np.power(noe_factor*sim_data[:,j],-noe_power) if data_source[j]=="NOE" else sim_data[:,j] for j in range(len(data_source))]).T
-    print "# ", sim_data.shape, exp_avg.shape
 
     assert(sim_data.shape[1] == exp_avg.shape[0])
 
@@ -359,7 +357,7 @@ def main():
         
         # write some statistics to screen 
         chi0,bcalc0 = chi(w_init,bounds)
-        print "# Initial conditions"
+        print "# Before minimization"
         print "# Chi squared: %10.6f" %  chi0 
         #print "# RMSD:        %10.6f" %  rmsd(w_init)
         print "# Srel:        %10.6f" %  srel(w_init) 
@@ -370,7 +368,6 @@ def main():
         w_opt = np.exp(-np.sum(result1.x[np.newaxis,:]*sim_data_block,axis=1))
         w_opt /= np.sum(w_opt)
         
-        #print result1.x
         eff = np.exp(np.sum(-w_opt*np.log(w_opt)))/len(w_opt)
         # write some statistics to screen 
         chi_opt,bcalc_opt = chi(w_opt,bounds)
@@ -381,12 +378,13 @@ def main():
         print "# Srel:        %10.6f" %  srel(w_opt) 
         print "# Functional:  %10.6f" %  func_gh(w_opt,chi_opt)
         print "# Fraction of used frames %4.3f" % eff
-        print "# ", result1.success, result1.message
-        #print "# AAAA  %10.6f %10.6f %10.6f %10.6f %4.3f" % (chi_opt ,rmsd1(w_opt),srel(w_opt), func_gh(w_opt),eff)
+        print "# Convergence successful?", result1.success
+        print "# Exit message:", result1.message
+        
         # and to output file
         write(name,w_opt,bounds,frames,data_source,mode="a")
         
-        fho = open("weights_%s.dat" % name,"a")  
+        fho = open("%s_weights.dat" % name,"a")  
         fho.write("# %s %s \n" % (result1.success, result1.message))
         fho.close()
 
