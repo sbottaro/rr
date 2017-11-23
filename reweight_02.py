@@ -80,6 +80,7 @@ def read_exp(f_exp):
                     sys.exit(1)
                 
             else:
+                if("#" in line): continue
                 num += 1
                 # NOES 
                 if(exp_type=="NOE"):
