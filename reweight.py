@@ -293,7 +293,7 @@ class Reweight:
             return 1
             
         
-    def weight_exp(self,exp_files,sim_files,outfile):
+    def weight_exp(self,exp_files,sim_files,outfile,plot=False):
         
         assert len(exp_files)==len(sim_files), "# Error. Number of experimental (%d) and simulation (%d) files must be equal" % (len(exp_files),len(sim_files))
         
@@ -312,7 +312,23 @@ class Reweight:
         fh_stats.write("# %-5s %8.4f  \n" % ("Theta",self.theta))        
         fh_stats.write("# %-5s %8.4f  \n" % ("neff",neff1))
 
-
+        if(plot):
+            from matplotlib.backends.backend_pdf import PdfPages
+            import matplotlib.pyplot as plt
+            try:
+                import seaborn as sns
+                sns.set_style("white")
+                sns.set_context("notebook")
+                c1 = sns.color_palette()[0]
+                c2 = sns.color_palette()[1]
+                c3 = sns.color_palette()[2]
+            except:
+                print "# not using Seaborn. Nevermind."
+                c1 = (0.29803921568627451, 0.44705882352941179, 0.69019607843137254)
+                c2 = (0.33333333333333331, 0.6588235294117647, 0.40784313725490196)
+                c3 = (0.7686274509803922, 0.30588235294117649, 0.32156862745098042)
+            pdf = PdfPages('%s.pdf' % outfile)
+            
         # now calculate rmsd, chi and print everything to file
         for k in range(len(exp_files)):
             labels, bounds, data_source, exp_data =  self.read_exp(exp_files[k])
@@ -348,6 +364,8 @@ class Reweight:
             rmsd1 = np.sqrt(np.average(diff1*diff1))
             chi_sq1 = np.sum(diff1*diff1/exp_data[:,1])/exp_data.shape[0]
 
+
+                
             # write to file.
             fh_stats.write("# %s vs. %s \n" % (exp_files[k].split("/")[-1],sim_files[k].split("/")[-1]))
             fh_stats.write("# %5s %8s %8s \n" % ("","before","after"))
@@ -364,8 +382,26 @@ class Reweight:
                     fh_stats.write("   %-15s %9.3e %9.3e %9.3e %9.3e \n" % (labels[l],exp_avg,sigma,sim_b,sim_a))
                 else:
                     fh_stats.write("   %-15s %9.3e %9.3e %9.3e %9.3e \n" % (labels[l],exp_data[l,0],np.sqrt(exp_data[l,1]),bcalc0[l],bcalc1[l]))
+
+                if(plot):
+                    bins = int(np.sqrt(sim_data.shape[0]*neff1*2))
+                    if(bins<5):
+                        print "#  Using %d bins (?)", bins
+                    h1,e1 = np.histogram(sim_data[:,l],weights=self.w0,bins=bins)
+                    h2,e2 = np.histogram(sim_data[:,l],weights=self.w_opt,bins=bins)
+                    ee = 0.5*(e1[1:]+e1[:-1])
+                    plt.plot(ee,h1,c=c1,label="Before")
+                    plt.plot(ee,h2,c=c2,label="After")
+                    plt.axvline(bcalc0[l],c=c1,ls='--')
+                    plt.axvline(bcalc1[l],c=c2,ls='--')
+                    plt.axvline(exp_data[l,0],c='k',ls='--',label="exp")
+                    plt.axvspan(exp_data[l,0]-exp_data[l,1], exp_data[l,0]+exp_data[l,1], alpha=0.2, color='0.4')
+                    plt.title("%s" % (exp_files[k].split("/")[-1]))
+                    plt.xlabel("%s %s (some units) " % (data_source[l],labels[l]))
+                    plt.legend()
+                    pdf.savefig()
+                    plt.close()
         fh_stats.close()
-        
         # write weights to file
         fname_weights = "%s.weights.dat" % (outfile)
         fh_weights  = open(fname_weights,'w')
@@ -378,9 +414,76 @@ class Reweight:
             fh_weights.write("  %8.4e %8.4e \n" % (self.w0[l],self.w_opt[l]))
         fh_weights.close()
         
+        if(plot):
+            pdf.close()
 
+
+    # read data with no experimental values
+    
+    def weight(self,sim_files,outfile,plot=False):
         
-        
+
+        fname_stats = "%s.stats.dat" % (outfile)
+        if(os.path.isfile(fname_stats)):
+            print "# File %s already exists. " % fname_stats
+            ov = raw_input("Overwrite? (y/n) ")
+            if(ov!="y"):
+                print "# Quit"
+                sys.exit(1)
+
+        fh_stats  = open(fname_stats,'w')
+        fh_stats.write("# Reweighting. n_data=%d, n_samples=%d \n" % (self.exp_data.shape[0],self.sim_data.shape[0]))
+        neff1 = np.exp(np.sum(-self.w_opt*np.log(self.w_opt)))/len(self.w_opt)
+        fh_stats.write("# %-5s %8.4f  \n" % ("Theta",self.theta))        
+        fh_stats.write("# %-5s %8.4f  \n" % ("neff",neff1))
+
+        if(plot):
+            from matplotlib.backends.backend_pdf import PdfPages
+            import matplotlib.pyplot as plt
+            try:
+                import seaborn as sns
+                sns.set_style("white")
+                sns.set_context("notebook")
+                c1 = sns.color_palette()[0]
+                c2 = sns.color_palette()[1]
+                c3 = sns.color_palette()[2]
+            except:
+                print "# not using Seaborn. Nevermind."
+                c1 = (0.29803921568627451, 0.44705882352941179, 0.69019607843137254)
+                c2 = (0.33333333333333331, 0.6588235294117647, 0.40784313725490196)
+                c3 = (0.7686274509803922, 0.30588235294117649, 0.32156862745098042)
+            pdf = PdfPages('%s.pdf' % outfile)
+
+        # read files
+        for k in range(len(sim_files)):
+            
+            sim_data = np.array(self.read_sim(sim_files[k]))
+            fh_stats.write("#  %s \n" % (sim_files[k].split("/")[-1]))
+            fh_stats.write("# %5s %8s %8s \n" % ("","before","after"))
+            for l in range(sim_data.shape[1]):
+                fh_stats.write(" %-5d %8.4f %8.4f \n" % (l,np.average(sim_data[:,l],weights=self.w0),np.average(sim_data[:,l],weights=self.w_opt)))
+                if(plot):
+                    bins = int(np.sqrt(sim_data.shape[0]*neff1*2))
+                    if(bins<5):
+                        print "#  Using %d bins (?)", bins
+                    h1,e1 = np.histogram(sim_data[:,l],weights=self.w0,bins=bins)
+                    h2,e2 = np.histogram(sim_data[:,l],weights=self.w_opt,bins=bins)
+                    ee = 0.5*(e1[1:]+e1[:-1])
+                    plt.plot(ee,h1,c=c1,label="Before")
+                    plt.plot(ee,h2,c=c2,label="After")
+                    plt.axvline(np.average(sim_data[:,l],weights=self.w0),c=c1,ls='--')
+                    plt.axvline(np.average(sim_data[:,l],weights=self.w_opt),c=c2,ls='--')
+                    plt.title("%s" % (sim_files[k].split("/")[-1]))
+                    plt.legend()
+                    pdf.savefig()
+                    plt.close()
+
+            fh_stats.close()
+            
+        if(plot):
+            pdf.close()
+
+
 '''        
         def func_maxent_laplace(lambdas):
 
