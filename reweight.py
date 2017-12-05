@@ -1,5 +1,5 @@
 #   This is a small script for reweighting molecular simulations using
-#   the Bayesian/MaxEnt approach (Hummer, Köfinger JCP 2015, Cesari, Gil-Ley, Bussi, JCTC 2016)
+#   the Bayesian/MaxEnt approach (Hummer, Koofinger JCP 2015, Cesari, Gil-Ley, Bussi, JCTC 2016)
 #   Copyright (C) 2017 Sandro Bottaro (sandro.bottaro@bio.ku.dk)
 
 #   This program is free software: you can redistribute it and/or modify
