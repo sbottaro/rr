@@ -1,3 +1,17 @@
+#   This is a small script for reweighting molecular simulations using
+#   the Bayesian/MaxEnt approach (Hummer, Köfinger JCP 2015, Cesari, Gil-Ley, Bussi, JCTC 2016)
+#   Copyright (C) 2017 Sandro Bottaro (sandro.bottaro@bio.ku.dk)
+
+#   This program is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License V3 as published by
+#   the Free Software Foundation, 
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 import numpy as np
 from scipy import optimize
 import argparse
@@ -185,6 +199,10 @@ class Reweight:
         
         return labels, bounds, data_source, exp_data
 
+    def srel(self,w):
+        idxs = np.where(w>1.0E-50)
+        return np.sum(w[idxs]*np.log(w[idxs]/self.w0[idxs]))
+
     def read_sim(self,filename,is_noe=False):
         
         data = np.array([[float(x) for x in line.split()[1:]] for line in open(filename) if("#" not in line)])
@@ -248,9 +266,6 @@ class Reweight:
             srel = self.theta*np.sum(w[idxs]*np.log(w[idxs]/self.w0[idxs]))
             return chi2_half+srel
 
-        def srel(w):
-            idxs = np.where(w>1.0E-50)
-            return np.sum(w[idxs]*np.log(w[idxs]/self.w0[idxs]))
             
         self.theta = theta
         # first, calculate initial chi squared and RMSD
@@ -279,12 +294,12 @@ class Reweight:
             w_opt = result.x
 
         chi_sq0 = self.chi_squared(self.w0)/len(self.exp_data)
-        print "Initial average chi squared %10.4f, srel %10.4f " % (chi_sq0, srel(self.w0))
+        print "Initial average chi squared %10.4f, srel %10.4f " % (chi_sq0, self.srel(self.w0))
 
         if(result.success):
             print "# Minimization successful"
             chi_sq1 = self.chi_squared(w_opt)/len(self.exp_data)
-            print "Final average chi squared   %10.4f, srel %10.4f " % (chi_sq1, srel(w_opt))
+            print "Final average chi squared   %10.4f, srel %10.4f " % (chi_sq1, self.srel(w_opt))
             self.w_opt = w_opt
             return 0
         else:
@@ -369,6 +384,7 @@ class Reweight:
             # write to file.
             fh_stats.write("# %s vs. %s \n" % (exp_files[k].split("/")[-1],sim_files[k].split("/")[-1]))
             fh_stats.write("# %5s %8s %8s \n" % ("","before","after"))
+            fh_stats.write("#  %-5s %8.4f %8.4f \n" % ("Srel",self.srel(self.w0),self.srel(self.w_opt)))
             fh_stats.write("#  %-5s %8.4f %8.4f \n" % ("RMSD",rmsd0,rmsd1))
             fh_stats.write("#  %-5s %8.4f %8.4f \n" % ("chi2",chi_sq0,chi_sq1))
             fh_stats.write("#  %-15s %9s %9s %9s %9s \n" % ("Label","avg_exp","sigma_exp","avg_before","avg_after"))
@@ -385,8 +401,9 @@ class Reweight:
 
                 if(plot):
                     bins = int(np.sqrt(sim_data.shape[0]*neff1*2))
-                    if(bins<5):
-                        print "#  Using %d bins (?)", bins
+                    if(bins<10):
+                        bins =10
+                        
                     h1,e1 = np.histogram(sim_data[:,l],weights=self.w0,bins=bins)
                     h2,e2 = np.histogram(sim_data[:,l],weights=self.w_opt,bins=bins)
                     ee = 0.5*(e1[1:]+e1[:-1])
