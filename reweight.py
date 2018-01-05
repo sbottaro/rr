@@ -273,8 +273,8 @@ class Reweight:
         if(method=="MAXENT"):
             opt={'maxiter':50000,'disp': False,'gtol':1.0e-20}
             #opt={'maxiter':50000,'disp': False,'ftol':1.0e-50}
-            meth = "L-BFGS-B"
-
+            #meth = "L-BFGS-B"
+            meth = "SLSQP"
             lambdas=np.zeros(self.exp_data.shape[0])
 
             result = optimize.minimize(func_maxent_gauss,lambdas,options=opt,method=meth,jac=True,bounds=self.bounds)
