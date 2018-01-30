@@ -31,7 +31,7 @@ class Reweight:
         self.bounds = []
         
         # this is to avoid numerics in NOE
-        self.noe_factor = 0.4
+        #self.noe_factor = 0.4
         self.noe_power = noe_power
         
         print "###### INITIALIZATION ########"
@@ -42,12 +42,14 @@ class Reweight:
 
         assert len(exp_files)==len(sim_files), "# Error. Number of experimental (%d) and simulation (%d) files must be equal" % (len(exp_files),len(sim_files))
         for k in range(len(exp_files)):
+            
             labels, bounds, data_source, exp_data =  self.read_exp(exp_files[k])
+            
+            sim_data = self.read_sim(sim_files[k])
             if(data_source[-1]=="NOE"):
-                sim_data = self.read_sim(sim_files[k],is_noe=True)
-            else:
-                sim_data = self.read_sim(sim_files[k])
-            assert len(labels) == len(sim_data[0]), "# Number of rows in %s not equal to number of columns in %s" % (nexp,nsim)
+                sim_data = np.power(sim_data,-self.noe_power)
+                
+            assert len(labels) == sim_data.shape[1], "# Number of rows in %s not equal to number of columns in %s" % (nexp,nsim)
             
             self.exp_data.extend(exp_data)
             if(k==0):
@@ -62,47 +64,35 @@ class Reweight:
         
         print "# Exp data shape ",self.exp_data.shape
         print "# Simulation data shape ",self.sim_data.shape
-        
+
+    
         # check that each expt point is within simulation data. Otherwise there might be something wrong?
         mins = np.min(self.sim_data,axis=0)
         maxs = np.max(self.sim_data,axis=0)
-        for k in range(len(self.exp_data)):
-            if(self.bounds[k][0] == None and self.bounds[k][1] == None):
-                if(self.exp_data[k,0] > maxs[k]):
-                    print "# Warning: expt average %s=%-10.4f is larger than maximum value in simulation %-10.4f"\
+        for k in range(len(self.exp_data)):            
+            if(self.bounds[k][0] == 0.0):
+                if( maxs[k] < self.exp_data[k,0]):
+                    print "# Warning: expt lower boundary %s=%-10.4f is larger than maximum value in simulation %-10.4f"\
                         % (self.labels[k],self.exp_data[k,0],maxs[k])
-                if(self.exp_data[k,0] < mins[k]):
-                    print "# Warning: expt average %s=%-10.4f is smaller than minimum value in simulation %-10.4f"\
-                        % (self.labels[k],self.exp_data[k,0],mins[k])
             else:
-                if(self.data_source[k] == "NOE"):
-                    # lower boundary - check that at least some points are above 
-                    exp_r = np.power(self.exp_data[k,0],-1./self.noe_power)/self.noe_factor
-                    max_r = np.power(mins[k],-1./self.noe_power)/self.noe_factor
-                    min_r = np.power(maxs[k],-1./self.noe_power)/self.noe_factor
-                    
-                    if(self.bounds[k][0] == 0.0):
-                        if( max_r < exp_r):
-                            print "# Warning: maximum value in simulation %-10.4f lower than exp. lower bound %s=%-10.4f"\
-                                % (max_r,self.labels[k],exp_r)
-                    if(self.bounds[k][1] == 0.0):
-                        if( min_r > exp_r):
-                            print "# Warning: minimum value in simulation %-10.4f larger than exp. upper bound %s=%-10.4f"\
-                                % (max_r,self.labels[k],exp_r)
-        
+                if(self.bounds[k][1] == 0.0):
+                    if( mins[k] < self.exp_data[k,0]):
+                        print "# Warning: expt upper boundary %s=%-10.4f is larger than minimum value in simulation %-10.4f"\
+                            % (self.labels[k],self.exp_data[k,0],maxs[k])
                 else:
-                    # lower boundary - check that at least some points are above 
-                    if(self.bounds[k][0] == 0.0):
-                        if( maxs[k] < self.exp_data[k,0]):
-                            print "# Warning: expt lower boundary %s=%-10.4f is larger than maximum value in simulation %-10.4f"\
-                                % (self.labels[k],self.exp_data[k,0],maxs[k])
-                    if(self.bounds[k][1] == 0.0):
-                        if( mins[k] < self.exp_data[k,0]):
-                            print "# Warning: expt upper boundary %s=%-10.4f is larger than minimum value in simulation %-10.4f"\
-                                % (self.labels[k],self.exp_data[k,0],maxs[k])
-        print "###### OK. ########"
+                    if(self.exp_data[k,0] > maxs[k]):
+                        print "# Warning: expt average %s=%-10.4f is larger than maximum value in simulation %-10.4f"\
+                            % (self.labels[k],self.exp_data[k,0],maxs[k])
+                    if(self.exp_data[k,0] < mins[k]):
+                        print "# Warning: expt average %s=%-10.4f is smaller than minimum value in simulation %-10.4f"\
+                            % (self.labels[k],self.exp_data[k,0],mins[k])
+            # normalize by experimental average
+            self.exp_data[k,1] /= self.exp_data[k,0]**2
+            self.sim_data[:,k] /= self.exp_data[k,0]
+            self.exp_data[k,0] /= self.exp_data[k,0]
+        print "###### Initialization OK ########"
         self.w0 = np.ones(self.sim_data.shape[0])/self.sim_data.shape[0]
-        
+
     # read experimental data
     def read_exp(self,filename):
 
@@ -164,7 +154,7 @@ class Reweight:
                     print "# Fatal error.Something wrong in your expt. data"
                     sys.exit(1)
                 # now convert distance to intensities. take the -n power and multiply by factor to avoid numerical problems
-                avg_int = np.power(self.noe_factor*avg,-self.noe_power)
+                avg_int = np.power(avg,-self.noe_power)
                 sigma_int = (self.noe_power*avg_int*sigma/(avg))**2
                 exp_data.append([avg_int,sigma_int])
                 
@@ -203,13 +193,11 @@ class Reweight:
         idxs = np.where(w>1.0E-50)
         return np.sum(w[idxs]*np.log(w[idxs]/self.w0[idxs]))
 
-    def read_sim(self,filename,is_noe=False):
+    def read_sim(self,filename):
         
         data = np.array([[float(x) for x in line.split()[1:]] for line in open(filename) if("#" not in line)])
-        if(is_noe):
-            data = np.power(self.noe_factor*data,-self.noe_power)
         print "# Read %d simulated datapoints from %d frames" % (data.shape[1],data.shape[0])
-        return list(data)
+        return data
 
 
     def set_w0(self,filename):
@@ -271,10 +259,10 @@ class Reweight:
         # first, calculate initial chi squared and RMSD
         
         if(method=="MAXENT"):
-            opt={'maxiter':50000,'disp': False,'gtol':1.0e-20}
-            #opt={'maxiter':50000,'disp': False,'ftol':1.0e-50}
-            #meth = "L-BFGS-B"
-            meth = "SLSQP"
+            #opt={'maxiter':10000,'disp': False,'ftol':1.0e-10}
+            opt={'maxiter':50000,'disp': False,'ftol':1.0e-50}
+            meth = "L-BFGS-B"
+            #meth = "SLSQP"
             lambdas=np.zeros(self.exp_data.shape[0])
 
             result = optimize.minimize(func_maxent_gauss,lambdas,options=opt,method=meth,jac=True,bounds=self.bounds)
@@ -347,16 +335,14 @@ class Reweight:
         # now calculate rmsd, chi and print everything to file
         for k in range(len(exp_files)):
             labels, bounds, data_source, exp_data =  self.read_exp(exp_files[k])
+            sim_data = self.read_sim(sim_files[k])
             if(data_source[-1]=="NOE"):
-                sim_data = self.read_sim(sim_files[k],is_noe=True)
-            else:
-                sim_data = self.read_sim(sim_files[k])
+                sim_data = np.power(sim_data,-self.noe_power)
 
             assert len(labels) == len(sim_data[0]), \
                 "# Number of rows in %s not equal to number of columns in %s" % (len(labels),len(labels))
             assert len(self.w_opt) ==  len(sim_data),\
                 "# Number of weights %d not equal to number of data from simulation (%d) %" (len(self.w_opt),len(sim_data))
-
 
             exp_data = np.array(exp_data)
             sim_data = np.array(sim_data)
@@ -379,7 +365,6 @@ class Reweight:
             rmsd1 = np.sqrt(np.average(diff1*diff1))
             chi_sq1 = np.sum(diff1*diff1/exp_data[:,1])/exp_data.shape[0]
 
-
                 
             # write to file.
             fh_stats.write("# %s vs. %s \n" % (exp_files[k].split("/")[-1],sim_files[k].split("/")[-1]))
@@ -391,9 +376,9 @@ class Reweight:
             for l in range(exp_data.shape[0]):
                 # convert to distances if is NOE
                 if(data_source[-1] == "NOE"):
-                    exp_avg  = np.power(exp_data[l,0],-1./self.noe_power)/self.noe_factor
-                    sim_b  = np.power(bcalc0[l],-1./self.noe_power)/self.noe_factor
-                    sim_a  = np.power(bcalc1[l],-1./self.noe_power)/self.noe_factor
+                    exp_avg  = np.power(exp_data[l,0],-1./self.noe_power)
+                    sim_b  = np.power(bcalc0[l],-1./self.noe_power)
+                    sim_a  = np.power(bcalc1[l],-1./self.noe_power)
                     sigma = np.sqrt(exp_data[l,1])*(exp_avg/(self.noe_power*exp_data[l,0]))
                     fh_stats.write("   %-15s %9.3e %9.3e %9.3e %9.3e \n" % (labels[l],exp_avg,sigma,sim_b,sim_a))
                 else:

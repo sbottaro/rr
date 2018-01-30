@@ -9,7 +9,7 @@ sim0 = "data/saxs_calc.dat"
 rew = rr.Reweight([exp0],[sim0])
 
 # optimize using different theta
-thetas = range(10,150,5)
+thetas = range(15,150,5)
 data = []
 
 for t in thetas:

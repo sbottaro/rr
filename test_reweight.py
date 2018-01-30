@@ -28,7 +28,8 @@ rew.optimize(theta=1.,method="MAXENT")
 # this command will write two files: 
 # i. example1.stats.dat, with averages, chi_squared, and rmsd before and after minimization
 # ii. examples1.weights.dat, with weights before/after minimization
-rew.weight_exp([exp0],[sim0],'example1_noe')
+rew.weight_exp([exp0],[sim0],'example1_noe_rescale')
+
 
 # one can also calculate other averages before/after reweighting, e.g. 3J scalar couplings
 # experimental data with format
@@ -38,7 +39,7 @@ exp1 = "data/j3_CCCC.exp.dat"
 sim1 = "data/J3.calc.dat"
 
 # do weighting. If plot=True, full distributions are plotted to example1_3j.pdf
-rew.weight_exp([exp1],[sim1],'example1_3j',plot=True)
+rew.weight_exp([exp1],[sim1],'example1_3j_rescale',plot=True)
 
 # Finally, one can calculate any other quantity. Here, the RMSD distance from some structure is calculated
 # before/after reweighting.
@@ -64,6 +65,6 @@ exp2 = "data/noe_CCCC_exp_bound.dat"
 # COL1=PROTON1 COL2=PROTON2 COL3=R COL4=SIGMA COL5=UPPER (for upper boundary) or LOWER (for lower boundary)
 sim2 = "data/NOE_BOUND.noe.calc.dat"
 
-rew2.weight_exp([exp0,exp1,exp2],[sim0,sim1,sim2],'example2')
+rew2.weight_exp([exp0,exp1,exp2],[sim0,sim1,sim2],'example2_rescale')
 
 ###############################################################
