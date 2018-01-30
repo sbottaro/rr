@@ -69,14 +69,19 @@ class Reweight:
         # check that each expt point is within simulation data. Otherwise there might be something wrong?
         mins = np.min(self.sim_data,axis=0)
         maxs = np.max(self.sim_data,axis=0)
-        for k in range(len(self.exp_data)):            
+        for k in range(len(self.exp_data)):
+            # boundaries only working for NOES
             if(self.bounds[k][0] == 0.0):
-                if( maxs[k] < self.exp_data[k,0]):
+                exp_r = np.power(self.exp_data[k,0],-1./self.noe_power)
+                max_r = np.power(mins[k],-1./self.noe_power)
+                if(max_r < exp_r):
                     print "# Warning: expt lower boundary %s=%-10.4f is larger than maximum value in simulation %-10.4f"\
                         % (self.labels[k],self.exp_data[k,0],maxs[k])
             else:
                 if(self.bounds[k][1] == 0.0):
-                    if( mins[k] < self.exp_data[k,0]):
+                    exp_r = np.power(self.exp_data[k,0],-1./self.noe_power)
+                    min_r = np.power(maxs[k],-1./self.noe_power)
+                    if(  min_r > exp_r):
                         print "# Warning: expt upper boundary %s=%-10.4f is larger than minimum value in simulation %-10.4f"\
                             % (self.labels[k],self.exp_data[k,0],maxs[k])
                 else:
