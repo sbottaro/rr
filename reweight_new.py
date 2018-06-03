@@ -19,20 +19,17 @@ import sys
 import os.path
 
 
-
 class Reweight:
 
 
-    def __init__(self,exp_files,sim_files,noe_power=6.0):
+    def __init__(self,exp_files,sim_files):
 
         self.exp_data = []
         self.data_source = []
         self.labels = []
         self.bounds = []
         
-        # this is to avoid numerics in NOE
-        #self.noe_factor = 0.4
-        self.noe_power = noe_power
+
         
         print "###### INITIALIZATION ########"
         
@@ -42,15 +39,21 @@ class Reweight:
 
         assert len(exp_files)==len(sim_files), "# Error. Number of experimental (%d) and simulation (%d) files must be equal" % (len(exp_files),len(sim_files))
         for k in range(len(exp_files)):
-            
-            labels, bounds, data_source, exp_data =  self.read_exp(exp_files[k])
-            
+
+            # read experimental data 
+            labels, bounds, exp_data, data_type,noe_power =  self.read_exp(exp_files[k])
+
+            # read simulation data
             sim_data = self.read_sim(sim_files[k])
-            if(data_source[-1]=="NOE"):
-                sim_data = np.power(sim_data,-self.noe_power)
-                
-            assert len(labels) == sim_data.shape[1], "# Number of rows in exp (%d) not equal to number of columns in calc (%d)" % (len(labels),sim_data.shape[1])
+            if(data_type=="NOE"):
+                sim_data = np.power(sim_data,-noe_power)
             
+            assert len(labels) == sim_data.shape[1], "# Number of rows in exp (%d) not equal to number of columns in calc (%d)" % (len(labels),sim_data.shape[1])
+            mins = np.min(sim_data,axis=0)
+            maxs = np.max(sim_data,axis=0)
+
+            for l in range(len(exp_data)):
+                
             self.exp_data.extend(exp_data)
             if(k==0):
                 self.sim_data = np.array(sim_data)
@@ -58,7 +61,7 @@ class Reweight:
                 self.sim_data = np.concatenate((self.sim_data,np.array(sim_data)),axis=1)
             self.labels.extend(labels)
             self.bounds.extend(bounds)
-            self.data_source.extend(data_source)
+            self.data_source.extend([data_type]*len(labels))
             
         self.exp_data = np.array(self.exp_data)
         
@@ -67,8 +70,6 @@ class Reweight:
 
     
         # check that each expt point is within simulation data. Otherwise there might be something wrong?
-        mins = np.min(self.sim_data,axis=0)
-        maxs = np.max(self.sim_data,axis=0)
         for k in range(len(self.exp_data)):
             # boundaries only working for NOES
             if(self.bounds[k][0] == 0.0):
@@ -107,91 +108,69 @@ class Reweight:
         
         # do some checks on first line
         assert first[0] == "#", "Error. First line of exp file %s must be in the format \# DATA=XXX PRIOR=XXX" % filename
+
+        # find data type and data prior
         data_type = (first[1].split("=")[1]).strip()
         prior_type = (first[2].split("=")[1]).strip()
         assert data_type in self.exp_types , "Error. DATA must be one of the following: %s " % (self.exp_types)
         assert prior_type in self.prior_types , "Error. PRIOR must be one of the following: %s " % (self.prior_types)
-
+        
+        # noe power is 6 by default, but it can be changed in file 
+        noe_power=6.0
+        if(len(first)==4 and first[3]=="POWER"):
+            noe_power = float((first[3].split("=")[1]).strip())
+            assert(noe_power>0.)
+            
         ln = 0
         labels = []
         bounds = []
-        data_source = []
         exp_data = []
         
-        # read data - NOE is a special case
-        if(data_type=="NOE"):
-            for line in fh:
-                # skip commented out data
-                if("#" in line): continue
+        for line in fh:
+            # skip commented out data
+            if("#" in line): continue
 
-                ln += 1
-                lsplit = line.split()
-                labels.append( "%s/%s"  % (lsplit[0],lsplit[1]))
-                data_source.append(data_type)
+            ln += 1
+            lsplit = line.split()
+            if(len(lsplit) != 3 or len(lsplit) != 4):
+                print "# ERROR: experimental line in %s not valid" % filename
+                print line,
+                sys.exit(1)
                 
-                # if lenght is 4, third and fourth columns are  r_avg and sigma
-                if(len(lsplit)==4):
-                    avg = float(lsplit[2])
-                    sigma = float(lsplit()[3])
-                    bounds.append([None,None])
+            labels.append( "%s"  % (lsplit[0]))
+            data_source.append(data_type)
+                
+            # if lenght is 4, third and fourth columns are  r_avg and sigma
+            avg0 = float(lsplit[2])
+            sigma0 = float(lsplit()[3])
 
-                # if lenght is 5
-                elif(len(lsplit)==5):
+            if(len(lsplit)==3):
+                bounds.append([None,None])
 
-                    # upper/lower bound
-                    if(lsplit[4] == "UPPER" or lsplit[4] == "LOWER"):
-                        avg = float(lsplit[2])
-                        sigma = float(lsplit[3])
-                        # upper/lower is inverted because of 1/r^n dependence of NOE
-                        if(lsplit[4] == "UPPER"): bounds.append([None, 0.0])
-                        else: bounds.append([0.0,None])
-                        
-                    # rmin,r,rmax
-                    else:
-                        r_low = float(line.split()[2])
-                        avg = float(line.split()[3])
-                        r_up = float(line.split()[4])
-                        assert(r_up >= avg)
-                        assert(avg >= r_low)
-                        # sigma is taken as the minimum distance from boundary
-                        sigma = min(r_up-avg, avg-r_low)
-                        bounds.append([None, None])
-                else:
-                    print "# Fatal error.Something wrong in your expt. data"
-                    sys.exit(1)
-                # now convert distance to intensities. take the -n power and multiply by factor to avoid numerical problems
-                avg_int = np.power(avg,-self.noe_power)
-                sigma_int = (self.noe_power*avg_int*sigma/(avg))**2
-                exp_data.append([avg_int,sigma_int])
-                
-        else:
-            for line in fh:
-                # skip commented out data
-                if("#" in line): continue
-                
-                lsplit = line.split()
-                ln += 1
-                data_source.append(data_type)
+            # if lenght is 4
+            elif(len(lsplit)==4):
 
-                # upper/lower bound only supported for NOE at the moment
-                
-                if(len(lsplit)==5):
-                    avg = float(lsplit[2])
-                    sigma = float(lsplit[3])
-                    exp_data.append([avg,sigma*sigma])
-                    labels.append( "%s-%s"  % (lsplit[0],lsplit[1]))
-                    if(lsplit[4] == "LOWER"):
+                # upper/lower bound
+                if(lsplit[3] == "UPPER"):
+                    # upper/lower is inverted because of 1/r^n dependence of NOE
+                    if(data_type=="NOE"):
                         bounds.append([None, 0.0])
-                    elif (lsplit[4] == "UPPER"):
+                    else:
+                        bounds.append([0.0,None])
+                elif(lsplit[3] == "LOWER"):
+                    if(data_type=="NOE"):
                         bounds.append([0.0,None])
                     else:
-                        print "# Fatal error.Something wrong in your expt. data"
-                        sys.exit(1)
-                else:
-                    exp_data.append([float(lsplit[1]),float(lsplit[2])*float(lsplit[2])])
-                    bounds.append([None, None])
-                    labels.append( "%s"  % (lsplit[0]))
+                        bounds.append([None, 0.0])
 
+
+            if(data_type=="NOE"):
+                avg = np.power(avg0,-self.noe_power)
+                sigma = (self.noe_power*avg*sigma0/(avg0))**2
+                exp_data.append([avg,sigma])
+            else:
+                exp_data.append([avg0,sigma0*sigma0])
+                
 
                 
         print "# Read %d %s experimental datapoints" % (ln,data_type)
@@ -199,7 +178,7 @@ class Reweight:
         assert(len(labels) == len(data_source))
         assert(len(labels) == len(exp_data))
         
-        return labels, bounds, data_source, exp_data
+        return labels, bounds, exp_data, data_type, noe_power
 
     def srel(self,w):
         idxs = np.where(w>1.0E-50)
