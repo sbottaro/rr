@@ -53,10 +53,10 @@ class Reweight:
             norm_factor = []
             for l in range(len(exp_data)):
 
-                if(bounds[l][0] == 0.0  and mins[l]> exp_data[l,0]):
+                if(bounds[l][0] == 0.0  and mins[l]> exp_data[l][0]):
                     print "# Warning: expt boundary %s=%-10.4f is smaller than minimum value in simulation %-10.4f"\
                         % (labels[l],exp_data[l][0],mins[l])
-                if(bounds[l][1] == 0.0  and maxs[l] < exp_data[l,0]):
+                if(bounds[l][1] == 0.0  and maxs[l] < exp_data[l][0]):
                     print "# Warning: expt boundary %s=%-10.4f is larger than maximum value in simulation %-10.4f"\
                         % (labels[l],exp_data[l][0],mins[l])
                 
@@ -217,14 +217,16 @@ class Reweight:
             avg = np.sum((ww[:,np.newaxis]*self.sim_data), axis=0)
             
             # errors are rescaled by factor theta
+            #err = (self.theta)*(self.exp_data[:,1])
             err = (self.theta)*(self.exp_data[:,1])
+            
             # gaussian integral
-            eps2 = 0.5*(self.theta)*np.sum((lambdas*lambdas)*err)
+            eps2 = 0.5*np.sum((lambdas*lambdas)*err)
             # experimental value 
             sum1 = np.dot(lambdas,self.exp_data[:,0])
             fun = sum1 + eps2+ np.log(zz)
             # gradient
-            jac = self.exp_data[:,0] + self.theta*lambdas*err - avg
+            jac = self.exp_data[:,0] + lambdas*err - avg
 
             return  fun,jac
 
@@ -248,7 +250,7 @@ class Reweight:
         
         if(method=="MAXENT"):
             #opt={'maxiter':10000,'disp': False,'ftol':1.0e-10}
-            opt={'maxiter':50000,'disp': False,'ftol':1.0e-50}
+            opt={'maxiter':50000,'disp': True,'ftol':1.0e-50}
             meth = "L-BFGS-B"
             #meth = "SLSQP"
             lambdas=np.zeros(self.exp_data.shape[0])
